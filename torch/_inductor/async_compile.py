@@ -5,6 +5,7 @@ import atexit
 import functools
 import logging
 import os
+import re
 import sys
 from concurrent.futures import Future, ThreadPoolExecutor
 from concurrent.futures.process import BrokenProcessPool
@@ -13,7 +14,7 @@ from typing import Any, Callable, Dict, List, Optional, TYPE_CHECKING
 
 import torch
 from torch._dynamo.device_interface import get_registered_device_interfaces
-from torch._dynamo.utils import dynamo_timed, set_feature_use
+from torch._dynamo.utils import counters, dynamo_timed, set_feature_use
 from torch._inductor import config
 from torch._inductor.codecache import (
     CodeCacheFuture,
@@ -31,6 +32,7 @@ from torch._inductor.runtime.compile_tasks import (
     _set_triton_ptxas_path,
     _worker_compile_triton,
 )
+from torch._inductor.utils import clear_on_fresh_inductor_cache
 from torch.hub import _Faketqdm, tqdm
 from torch.utils._ordered_set import OrderedSet
 from torch.utils._triton import has_triton_package
@@ -95,6 +97,9 @@ log = logging.getLogger(__name__)
 # Used to keep track of all process pools invoked so far.
 _pool_set = OrderedSet[SubprocPool]()
 
+# TODO - pass in at runtime
+cache_interference_pattern = re.compile(r"'optimize_mem': (?:True|False), ")
+
 
 def shutdown_compile_workers() -> None:
     """Shut down all outstanding compile-worker pools."""
@@ -123,6 +128,12 @@ def get_compile_threads() -> int:
     if config.compile_threads is None:
         config.compile_threads = config.decide_compile_threads()
     return config.compile_threads
+
+
+@clear_on_fresh_inductor_cache
+@functools.lru_cache
+def get_future_cache():
+    return {}
 
 
 class AsyncCompile:
@@ -193,7 +204,17 @@ class AsyncCompile:
             # process pool is running, so pass them to the subprocess to reset.
             env_vars = ["TORCHINDUCTOR_CACHE_DIR", "TRITON_CACHE_DIR"]
             extra_env = {v: os.environ[v] for v in env_vars if v in os.environ}
-            return TritonFuture(
+
+            future_cache = get_future_cache()
+            # TODO: pass in at runtime, fix
+            source_code_key = cache_interference_pattern.sub("", source_code)
+
+            if future := future_cache.get(source_code_key, None):
+                counters["inductor"]["async_compile_cache_hit"] += 1
+                return future
+
+            counters["inductor"]["async_compile_cache_miss"] += 1
+            future = TritonFuture(
                 kernel,
                 self.process_pool().submit(
                     _worker_compile_triton,
@@ -201,6 +222,9 @@ class AsyncCompile:
                     extra_env,
                 ),
             )
+            future_cache[source_code_key] = future
+            return future
+
         else:
             set_feature_use(
                 "pytorch/inductor:enable_parallel_compile_version (post_warmup)", False
