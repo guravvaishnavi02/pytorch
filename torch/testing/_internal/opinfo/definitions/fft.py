@@ -141,12 +141,12 @@ op_db: List[OpInfo] = [
         skips=(
             DecorateInfo(
                 unittest.expectedFailure,
-                'TestCommon',
-                'test_non_standard_bool_values',
+                "TestCommon",
+                "test_non_standard_bool_values",
                 dtypes=[torch.bool],
-                device_type='mps'
+                device_type="mps",
             ),
-        )
+        ),
     ),
     SpectralFuncInfo(
         "fft.fft2",
@@ -180,10 +180,10 @@ op_db: List[OpInfo] = [
             ),
             DecorateInfo(
                 unittest.expectedFailure,
-                'TestCommon',
-                'test_non_standard_bool_values',
+                "TestCommon",
+                "test_non_standard_bool_values",
                 dtypes=[torch.bool],
-                device_type='mps'
+                device_type="mps",
             ),
         ),
     ),
@@ -211,12 +211,12 @@ op_db: List[OpInfo] = [
         skips=(
             DecorateInfo(
                 unittest.expectedFailure,
-                'TestCommon',
-                'test_non_standard_bool_values',
+                "TestCommon",
+                "test_non_standard_bool_values",
                 dtypes=[torch.bool],
-                device_type='mps'
+                device_type="mps",
             ),
-        )
+        ),
     ),
     SpectralFuncInfo(
         "fft.hfft",
@@ -250,16 +250,16 @@ op_db: List[OpInfo] = [
             # FIXME[MPS]: test_out_warning_fft_hfft_mps crashes with `Invalid KernelDAG`
             DecorateInfo(
                 unittest.skip("Skipped on MPS due to hard crash"),
-                'TestCommon',
-                'test_out_warning',
-                device_type='mps'
+                "TestCommon",
+                "test_out_warning",
+                device_type="mps",
             ),
             DecorateInfo(
                 unittest.expectedFailure,
-                'TestCommon',
-                'test_non_standard_bool_values',
+                "TestCommon",
+                "test_non_standard_bool_values",
                 dtypes=[torch.bool],
-                device_type='mps'
+                device_type="mps",
             ),
         ),
     ),
@@ -307,10 +307,10 @@ op_db: List[OpInfo] = [
             ),
             DecorateInfo(
                 unittest.expectedFailure,
-                'TestCommon',
-                'test_non_standard_bool_values',
+                "TestCommon",
+                "test_non_standard_bool_values",
                 dtypes=[torch.bool],
-                device_type='mps'
+                device_type="mps",
             ),
         ),
     ),
@@ -351,10 +351,10 @@ op_db: List[OpInfo] = [
             ),
             DecorateInfo(
                 unittest.expectedFailure,
-                'TestCommon',
-                'test_non_standard_bool_values',
+                "TestCommon",
+                "test_non_standard_bool_values",
                 dtypes=[torch.bool],
-                device_type='mps'
+                device_type="mps",
             ),
         ),
     ),
@@ -379,10 +379,10 @@ op_db: List[OpInfo] = [
         skips=(
             DecorateInfo(
                 unittest.expectedFailure,
-                'TestCommon',
-                'test_non_standard_bool_values',
+                "TestCommon",
+                "test_non_standard_bool_values",
                 dtypes=[torch.bool],
-                device_type='mps'
+                device_type="mps",
             ),
         ),
         check_batched_gradgrad=False,
@@ -412,10 +412,10 @@ op_db: List[OpInfo] = [
         skips=(
             DecorateInfo(
                 unittest.expectedFailure,
-                'TestCommon',
-                'test_non_standard_bool_values',
+                "TestCommon",
+                "test_non_standard_bool_values",
                 dtypes=[torch.bool],
-                device_type='mps'
+                device_type="mps",
             ),
         ),
     ),
@@ -444,12 +444,12 @@ op_db: List[OpInfo] = [
         skips=(
             DecorateInfo(
                 unittest.expectedFailure,
-                'TestCommon',
-                'test_non_standard_bool_values',
+                "TestCommon",
+                "test_non_standard_bool_values",
                 dtypes=[torch.bool],
-                device_type='mps'
+                device_type="mps",
             ),
-        )
+        ),
     ),
     SpectralFuncInfo(
         "fft.ifft",
@@ -474,12 +474,12 @@ op_db: List[OpInfo] = [
         skips=(
             DecorateInfo(
                 unittest.expectedFailure,
-                'TestCommon',
-                'test_non_standard_bool_values',
+                "TestCommon",
+                "test_non_standard_bool_values",
                 dtypes=[torch.bool],
-                device_type='mps'
+                device_type="mps",
             ),
-        )
+        ),
     ),
     SpectralFuncInfo(
         "fft.ifft2",
@@ -511,12 +511,12 @@ op_db: List[OpInfo] = [
         skips=(
             DecorateInfo(
                 unittest.expectedFailure,
-                'TestCommon',
-                'test_non_standard_bool_values',
+                "TestCommon",
+                "test_non_standard_bool_values",
                 dtypes=[torch.bool],
-                device_type='mps'
+                device_type="mps",
             ),
-        )
+        ),
     ),
     SpectralFuncInfo(
         "fft.ifftn",
@@ -548,12 +548,12 @@ op_db: List[OpInfo] = [
         skips=(
             DecorateInfo(
                 unittest.expectedFailure,
-                'TestCommon',
-                'test_non_standard_bool_values',
+                "TestCommon",
+                "test_non_standard_bool_values",
                 dtypes=[torch.bool],
-                device_type='mps'
+                device_type="mps",
             ),
-        )
+        ),
     ),
     SpectralFuncInfo(
         "fft.ihfft",
@@ -573,8 +573,13 @@ op_db: List[OpInfo] = [
             torch.bool, *(() if (not SM53OrLater) else (torch.half,))
         ),
         skips=(
-            DecorateInfo(unittest.expectedFailure, 'TestCommon', 'test_non_standard_bool_values',
-                                    dtypes=[torch.bool], device_type='mps'),
+            DecorateInfo(
+                unittest.expectedFailure,
+                "TestCommon",
+                "test_non_standard_bool_values",
+                dtypes=[torch.bool],
+                device_type="mps",
+            ),
         ),
         check_batched_grad=False,
     ),
@@ -610,9 +615,14 @@ op_db: List[OpInfo] = [
             DecorateInfo(unittest.expectedFailure, "TestCommon", "test_out_warnings"),
         ),
         skips=(
-            DecorateInfo(unittest.expectedFailure, 'TestCommon', 'test_non_standard_bool_values',
-                                    dtypes=[torch.bool], device_type='mps'),
-        )
+            DecorateInfo(
+                unittest.expectedFailure,
+                "TestCommon",
+                "test_non_standard_bool_values",
+                dtypes=[torch.bool],
+                device_type="mps",
+            ),
+        ),
     ),
     SpectralFuncInfo(
         "fft.ihfftn",
@@ -645,9 +655,14 @@ op_db: List[OpInfo] = [
             ),
         ],
         skips=(
-            DecorateInfo(unittest.expectedFailure, 'TestCommon', 'test_non_standard_bool_values',
-                                    dtypes=[torch.bool], device_type='mps'),
-        )
+            DecorateInfo(
+                unittest.expectedFailure,
+                "TestCommon",
+                "test_non_standard_bool_values",
+                dtypes=[torch.bool],
+                device_type="mps",
+            ),
+        ),
     ),
     SpectralFuncInfo(
         "fft.irfft",
@@ -674,18 +689,18 @@ op_db: List[OpInfo] = [
             # FIXME[MPS]: test_out_warning_fft_irfft_mps crashes with `Invalid KernelDAG`
             DecorateInfo(
                 unittest.skip("Skipped on MPS due to hard crash"),
-                'TestCommon',
-                'test_out_warning',
-                device_type='mps',
+                "TestCommon",
+                "test_out_warning",
+                device_type="mps",
             ),
             DecorateInfo(
                 unittest.expectedFailure,
-                'TestCommon',
-                'test_non_standard_bool_values',
+                "TestCommon",
+                "test_non_standard_bool_values",
                 dtypes=[torch.bool],
-                device_type='mps'
+                device_type="mps",
             ),
-        )
+        ),
     ),
     SpectralFuncInfo(
         "fft.irfft2",
@@ -719,18 +734,18 @@ op_db: List[OpInfo] = [
             # FIXME[MPS]: test_out_warning_fft_irfft2_mps crashes with `Invalid KernelDAG`
             DecorateInfo(
                 unittest.skip("Skipped on MPS due to hard crash"),
-                'TestCommon',
-                'test_out_warning',
-                device_type='mps',
+                "TestCommon",
+                "test_out_warning",
+                device_type="mps",
             ),
             DecorateInfo(
                 unittest.expectedFailure,
-                'TestCommon',
-                'test_non_standard_bool_values',
+                "TestCommon",
+                "test_non_standard_bool_values",
                 dtypes=[torch.bool],
-                device_type='mps'
+                device_type="mps",
             ),
-        )
+        ),
     ),
     SpectralFuncInfo(
         "fft.irfftn",
@@ -761,9 +776,14 @@ op_db: List[OpInfo] = [
             )
         ],
         skips=(
-            DecorateInfo(unittest.expectedFailure, 'TestCommon', 'test_non_standard_bool_values',
-                                    dtypes=[torch.bool], device_type='mps'),
-        )
+            DecorateInfo(
+                unittest.expectedFailure,
+                "TestCommon",
+                "test_non_standard_bool_values",
+                dtypes=[torch.bool],
+                device_type="mps",
+            ),
+        ),
     ),
     OpInfo(
         "fft.fftshift",
