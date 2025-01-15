@@ -318,7 +318,8 @@ compute_flex_attention = r"""
     # initialize pointer to m and l
     m_i = tl.zeros([BLOCK_M], dtype=tl.float32) - float("inf")
     l_i = tl.zeros([BLOCK_M], dtype=tl.float32)
-    acc = tl.zeros([BLOCK_M, V_HEAD_DIM], dtype=tl.float32)
+    # acc = tl.zeros([BLOCK_M, V_HEAD_DIM], dtype=tl.float32)
+    acc = tl.zeros([BLOCK_M, V_HEAD_DIM_ROUNDED], dtype=tl.float32)
 
     offs_m = q_start * BLOCK_M + tl.arange(0, BLOCK_M)
 
@@ -332,16 +333,17 @@ compute_flex_attention = r"""
         shape=(Q_LEN, QK_HEAD_DIM),
         strides=(stride_qm, stride_qk),
         offsets=(q_start * BLOCK_M, 0),
-        block_shape=(BLOCK_M, QK_HEAD_DIM),
+        # block_shape=(BLOCK_M, QK_HEAD_DIM),
+        block_shape=(BLOCK_M, QK_HEAD_DIM_ROUNDED),
         order=(1, 0)
     )
 
     # load q: it stays in SRAM throughout the inner loop.
-    if IS_DIVISIBLE:
+    if IS_DIVISIBLE and SAFE_HEAD_DIM:
         q = tl.load(Q_block_ptr)
     else:
         # boundary check is not free, so we only do it when necessary.
-        q = tl.load(Q_block_ptr, boundary_check=(0,), padding_option = "zero")
+        q = tl.load(Q_block_ptr, boundary_check=(0, 1), padding_option = "zero")
 
     # ~~~~~~~~~~~~~~ normal blocks ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
     # We don't know anything "special" about these blocks, so we need to apply
@@ -356,7 +358,8 @@ compute_flex_attention = r"""
         shape=(QK_HEAD_DIM, KV_LEN),
         strides=(stride_kk, stride_kn),
         offsets=(0, kv_start),
-        block_shape=(QK_HEAD_DIM, BLOCK_N),
+        # block_shape=(QK_HEAD_DIM, BLOCK_N),
+        block_shape=(QK_HEAD_DIM_ROUNDED, BLOCK_N),
         order=(0, 1)
     )
     V_block_ptr = tl.make_block_ptr(
@@ -364,7 +367,8 @@ compute_flex_attention = r"""
         shape=(KV_LEN, V_HEAD_DIM),
         strides=(stride_vn, stride_vk),
         offsets=(kv_start, 0),
-        block_shape=(BLOCK_N, V_HEAD_DIM),
+        # block_shape=(BLOCK_N, V_HEAD_DIM),
+        block_shape=(BLOCK_N, V_HEAD_DIM_ROUNDED),
         order=(1, 0)
     )
     offs_n = kv_start + tl.arange(0, BLOCK_N)
@@ -395,7 +399,8 @@ compute_flex_attention = r"""
             shape=(QK_HEAD_DIM, KV_LEN),
             strides=(stride_kk, stride_kn),
             offsets=(0, kv_start),
-            block_shape=(QK_HEAD_DIM, BLOCK_N),
+            # block_shape=(QK_HEAD_DIM, BLOCK_N),
+            block_shape=(QK_HEAD_DIM_ROUNDED, BLOCK_N),
             order=(0, 1)
         )
         V_block_ptr = tl.make_block_ptr(
@@ -403,7 +408,8 @@ compute_flex_attention = r"""
             shape=(KV_LEN, V_HEAD_DIM),
             strides=(stride_vn, stride_vk),
             offsets=(kv_start, 0),
-            block_shape=(BLOCK_N, V_HEAD_DIM),
+            # block_shape=(BLOCK_N, V_HEAD_DIM),
+            block_shape=(BLOCK_N, V_HEAD_DIM_ROUNDED),
             order=(1, 0)
         )
         offs_n = kv_start + tl.arange(0, BLOCK_N)
@@ -429,9 +435,11 @@ compute_flex_attention = r"""
     idx_zq = tl.program_id(1) // HQ
     idx_hq = tl.program_id(1) % HQ
     idx_m = offs_m[:, None]
-    idx_d = tl.arange(0, V_HEAD_DIM)[None, :]
+    # idx_d = tl.arange(0, V_HEAD_DIM)[None, :]
+    idx_d = tl.arange(0, V_HEAD_DIM_ROUNDED)[None, :]
 
-    mask = idx_m < Q_LEN
+    # mask = idx_m < Q_LEN
+    mask = (idx_m < Q_LEN) & (idx_d < V_HEAD_DIM)
 
     {{store_output(("idx_zq", "idx_hq", "idx_m", "idx_d"), "acc", "mask")}}
 
@@ -474,7 +482,7 @@ def forward_inner(
 
     # loop over k, v and update accumulator until block_n_end
     for start_n in range(block_n_start, block_n_end):
-        if IS_DIVISIBLE:
+        if IS_DIVISIBLE and SAFE_HEAD_DIM:
             acc, l_i, m_i = forward_block_mn(
                 {{gen_argdefs()}},
                 q, K_block_ptr, V_block_ptr, Q_LEN, KV_LEN,
@@ -528,15 +536,16 @@ def forward_block_mn(
     off_z, off_h, offs_m, offs_n,
     MATMUL_PRECISION, RCP_LN2,
     IS_FULL_BLOCKS, CHECK_BLOCK_BOUNDARY=False,
+
 ):
     # Redefines all kernel parameters (BLOCK_M, etc.) so we don't need to plumb them all through
     {{gen_defines() | indent_except_first(1)}}
 
     # -- load k --
-    if IS_DIVISIBLE:
+    if IS_DIVISIBLE and not CHECK_BLOCK_BOUNDARY:
         k = tl.load(K_block_ptr)
     else:
-        k = tl.load(K_block_ptr, boundary_check=(1,), padding_option = "zero")
+        k = tl.load(K_block_ptr, boundary_check=(0, 1), padding_option = "zero")
     # -- compute qk ---
     qk = tl.dot(q, k, input_precision=FLOAT32_PRECISION) # TODO: use cuda matmul when q_len <= 2.
     if not PRESCALE_QK:
@@ -606,10 +615,10 @@ def forward_block_mn(
     # # -- scale and update acc --
     acc = acc * alpha[:, None]
 
-    if IS_DIVISIBLE:
+    if IS_DIVISIBLE and not CHECK_BLOCK_BOUNDARY:
         v = tl.load(V_block_ptr)
     else:
-        v = tl.load(V_block_ptr, boundary_check=(0,), padding_option = "zero")
+        v = tl.load(V_block_ptr, boundary_check=(0, 1), padding_option = "zero")
     acc = tl.dot(p.to(MATMUL_PRECISION), v, acc, input_precision=FLOAT32_PRECISION)
 
     # -- update m_i
@@ -1032,6 +1041,16 @@ def lower_cpu(
     return (res,)
 
 
+def is_power_of_2(n):
+    return n != 0 and ((n & (n - 1)) == 0)
+
+
+def next_power_of_two(n):
+    if n <= 0:
+        return 1
+    return 2 ** math.ceil(math.log2(n))
+
+
 # TODO: We probably also need a layout constraint?
 @register_lowering(torch.ops.higher_order.flex_attention, type_promotion_kind=None)
 def flex_attention(
@@ -1199,12 +1218,24 @@ def flex_attention(
         full_kv_num_blocks, full_kv_indices = (
             empty(0, device=query.get_device()) for _ in range(2)
         )
+
+    # QK dimensions and power of 2 variants
+    qk_head_dim_static = V.graph.sizevars.evaluate_static_shape(qk_head_dim)
+    kernel_options.setdefault("QK_HEAD_DIM", qk_head_dim_static)
     kernel_options.setdefault(
-        "QK_HEAD_DIM",
-        V.graph.sizevars.evaluate_static_shape(qk_head_dim),
+        "QK_HEAD_DIM_ROUNDED", next_power_of_two(qk_head_dim_static)
     )
+
+    # V dimensions and power of 2 variants
+    v_head_dim_static = V.graph.sizevars.evaluate_static_shape(v_head_dim)
+    kernel_options.setdefault("V_HEAD_DIM", v_head_dim_static)
     kernel_options.setdefault(
-        "V_HEAD_DIM", V.graph.sizevars.evaluate_static_shape(v_head_dim)
+        "V_HEAD_DIM_ROUNDED", next_power_of_two(v_head_dim_static)
+    )
+
+    kernel_options.setdefault(
+        "SAFE_HEAD_DIM",
+        is_power_of_2(qk_head_dim_static) and is_power_of_2(v_head_dim_static),
     )
 
     choices: List[Any] = []
@@ -1455,6 +1486,7 @@ flex_attention_backward_template = TritonTemplate(
         DELTA2 = DELTA + off_chz2
 
         dq = tl.zeros([BLOCK_M2, QK_HEAD_DIM], dtype=tl.float32)
+        # TODO dq = tl.zeros([BLOCK_M2, BLOCK_DMODEL_ROUNDED], dtype=tl.float32)
 
         start_m2 = start_m2_block * BLOCK_M2
         offs_m2 = start_m2 + tl.arange(0, BLOCK_M2)
@@ -1466,6 +1498,9 @@ flex_attention_backward_template = TritonTemplate(
         else:
             q = tl.load(Q2 + offs_m2[:, None] * stride_qm + offs_k[None, :] * stride_qd, mask=offs_m2[:, None] < Q_LEN)
             do = tl.load(DO2 + offs_m2[:, None] * stride_dom + offs_v[None, :] * stride_dod, mask=offs_m2[:, None] < Q_LEN)
+            # TODO
+            # q = tl.load(Q2 + offs_m2[:, None] * stride_qm + offs_k[None, :] * stride_qd, mask=(offs_m2[:, None] < Q_LEN) & (offs_k[None, :] < BLOCK_DMODEL))
+            # do = tl.load(DO2 + offs_m2[:, None] * stride_dom + offs_k[None, :] * stride_dod, mask=(offs_m2[:, None] < Q_LEN) & (offs_k[None, :] < BLOCK_DMODEL))
 
         if PRESCALE_QK:
             q = (q * SM_SCALE * RCP_LN2).to(MATMUL_PRECISION)
@@ -1522,7 +1557,7 @@ flex_attention_backward_template = TritonTemplate(
         if IS_DIVISIBLE:
             tl.store(dq_ptrs, dq)
         else:
-            tl.store(dq_ptrs, dq, mask=offs_m2[:, None] < Q_LEN)
+            tl.store(dq_ptrs, dq, mask=(offs_m2[:, None] < Q_LEN) & (offs_k[None, :] < BLOCK_DMODEL))
     else:
         # THIS BLOCK DOES DK & DV
         SPARSE_Q_MULTIPLE = (SPARSE_Q_BLOCK_SIZE // BLOCK_M1)
@@ -1536,6 +1571,9 @@ flex_attention_backward_template = TritonTemplate(
 
         dv = tl.zeros([BLOCK_N1, V_HEAD_DIM], dtype=tl.float32)
         dk = tl.zeros([BLOCK_N1, QK_HEAD_DIM], dtype=tl.float32)
+        # TODO
+        # dv = tl.zeros([BLOCK_N1, BLOCK_DMODEL_ROUNDED], dtype=tl.float32)
+        # dk = tl.zeros([BLOCK_N1, BLOCK_DMODEL_ROUNDED], dtype=tl.float32)
 
         start_n1 = pid * BLOCK_N1
         offs_n1 = start_n1 + tl.arange(0, BLOCK_N1)
@@ -1547,6 +1585,9 @@ flex_attention_backward_template = TritonTemplate(
         else:
             k = tl.load(K + offs_n1[:, None] * stride_kn + offs_k[None, :] * stride_kd, mask=offs_n1[:, None] < KV_LEN)
             v = tl.load(V + offs_n1[:, None] * stride_vn + offs_v[None, :] * stride_vd, mask=offs_n1[:, None] < KV_LEN)
+            # TODO
+            # k = tl.load(K + offs_n1[:, None] * stride_kn + offs_k[None, :] * stride_kd, mask=(offs_n1[:, None] < KV_LEN) & (offs_k[None, :] < BLOCK_DMODEL))
+            # v = tl.load(V + offs_n1[:, None] * stride_vn + offs_k[None, :] * stride_vd, mask=(offs_n1[:, None] < KV_LEN) & (offs_k[None, :] < BLOCK_DMODEL))
         if PRESCALE_QK:
             k = (k * SM_SCALE * RCP_LN2).to(MATMUL_PRECISION)
 
@@ -1619,7 +1660,7 @@ flex_attention_backward_template = TritonTemplate(
         if IS_DIVISIBLE:
             tl.store(dv_ptrs, dv)
         else:
-            tl.store(dv_ptrs, dv, mask=index_n < KV_LEN)
+            tl.store(dv_ptrs, dv, mask=(index_n < KV_LEN) & (index_k < BLOCK_DMODEL))
 
         dk *= SM_SCALE
         mask = index_n < KV_LEN
@@ -1627,6 +1668,9 @@ flex_attention_backward_template = TritonTemplate(
         # first compute broadcasted dk of shape [Bq, Hkv, KV_LEN, V_HEAD_DIM]
         # then reduce to dk of shape [Bkv, Hkv, KV_LEN, V_HEAD_DIM]
         {{store_output(("off_zq", "off_hkv", "index_n", "index_k"), "dk", "mask", indent_width=8)}}
+        # TODO
+        # mask = (index_n < KV_LEN) & (index_k < BLOCK_DMODEL)
+        # {{store_output(("off_z", "off_hkv", "index_n", "index_k"), "dk", "mask", indent_width=8)}}
 
 @triton.jit
 def bwd_dq_inner(
@@ -1647,6 +1691,7 @@ def bwd_dq_inner(
 
     offs_k = tl.arange(0, QK_HEAD_DIM)
     offs_v = tl.arange(0, V_HEAD_DIM)
+    # TODO offs_k = tl.arange(0, BLOCK_DMODEL_ROUNDED)
 
     kT_ptrs = K + offs_n2[None, :] * stride_kn + offs_k[:, None] * stride_kd
     vT_ptrs = V + offs_n2[None, :] * stride_vn + offs_v[:, None] * stride_vd
@@ -1660,7 +1705,7 @@ def bwd_dq_inner(
                 dq = bwd_dq_block_mn(
                     {{gen_argdefs()}},
                     dq, q, kT_ptrs, vT_ptrs, do, Di, lse, Q_LEN, KV_LEN,
-                    off_z, off_hq, offs_m2, offs_n2,
+                    off_z, off_hq, offs_m2, offs_n2, offs_k,
                     stride_kn, stride_kd, stride_vn, stride_vd,
                     kv_indices, sparse_kv_num_blocks,
                     MATMUL_PRECISION, RCP_LN2,
@@ -1681,7 +1726,7 @@ def bwd_dq_inner(
             dq = bwd_dq_block_mn(
                 {{gen_argdefs()}},
                 dq, q, kT_ptrs, vT_ptrs, do, Di, lse, Q_LEN, KV_LEN,
-                off_z, off_hq, offs_m2, offs_n2,
+                off_z, off_hq, offs_m2, offs_n2, offs_k,
                 stride_kn, stride_kd, stride_vn, stride_vd,
                 kv_indices, sparse_kv_num_blocks,
                 MATMUL_PRECISION, RCP_LN2,
@@ -1692,7 +1737,7 @@ def bwd_dq_inner(
             dq = bwd_dq_block_mn(
                 {{gen_argdefs()}},
                 dq, q, kT_ptrs, vT_ptrs, do, Di, lse, Q_LEN, KV_LEN,
-                off_z, off_hq, offs_m2, offs_n2,
+                off_z, off_hq, offs_m2, offs_n2, offs_k,
                 stride_kn, stride_kd, stride_vn, stride_vd,
                 kv_indices, sparse_kv_num_blocks,
                 MATMUL_PRECISION, RCP_LN2,
@@ -1717,7 +1762,7 @@ def bwd_dq_inner(
 def bwd_dq_block_mn(
     {{gen_argdefs()}},
     dq, q, kT_ptrs, vT_ptrs, do, Di, lse, Q_LEN, KV_LEN,
-    off_z, off_hq, offs_m2, offs_n2,
+    off_z, off_hq, offs_m2, offs_n2, offs_k,
     stride_kn, stride_kd, stride_vn, stride_vd,
     kv_indices, sparse_kv_num_blocks,
     MATMUL_PRECISION, RCP_LN2,
@@ -1729,6 +1774,7 @@ def bwd_dq_block_mn(
         kT = tl.load(kT_ptrs)
     else:
         kT = tl.load(kT_ptrs, mask=offs_n2[None, :] < KV_LEN)
+        # TODO kT = tl.load(kT_ptrs, mask=(offs_n2[None, :] < KV_LEN) & (offs_k[:, None] < BLOCK_DMODEL))
     qk = tl.dot(q, kT, input_precision=FLOAT32_PRECISION)
     if not PRESCALE_QK:
         qk *= SM_SCALE
@@ -1778,6 +1824,7 @@ def bwd_dq_block_mn(
         vT = tl.load(vT_ptrs)
     else:
         vT = tl.load(vT_ptrs, mask=offs_n2[None, :] < KV_LEN)
+        # TODO vT = tl.load(vT_ptrs, mask=(offs_n2[None, :] < KV_LEN) & (offs_k[:, None] < BLOCK_DMODEL))
     dp = tl.dot(do, vT, input_precision=FLOAT32_PRECISION)
     ds = p * (dp - Di[:, None])
     # ~~~~~~~~~~~~~~~~~~~ Apply joint modification  ~~~~~~~~~~~~~~~~~~~
@@ -1843,6 +1890,7 @@ def bwd_dkdv_inner(
 
     offs_k = tl.arange(0, QK_HEAD_DIM)
     offs_v = tl.arange(0, V_HEAD_DIM)
+    # TODO offs_k = tl.arange(0, BLOCK_DMODEL_ROUNDED)
 
     qT_ptrs = Q + offs_m1[None, :] * stride_qm + offs_k[:, None] * stride_qd
     do_ptrs = DO + offs_m1[:, None] * stride_dom + offs_v[None, :] * stride_dod
@@ -1856,7 +1904,7 @@ def bwd_dkdv_inner(
                 dk, dv = bwd_dkdv_block_mn(
                     {{gen_argdefs()}},
                     dk, dv, qT_ptrs, k, v, do_ptrs, DELTA, LSE, Q_LEN, KV_LEN,
-                    off_z, off_hq, offs_n1, offs_m1,
+                    off_z, off_hq, offs_n1, offs_m1, offs_k,
                     stride_qm, stride_qd, stride_dom, stride_dod,
                     q_indices, sparse_q_num_blocks,
                     MATMUL_PRECISION, RCP_LN2,
@@ -1876,7 +1924,7 @@ def bwd_dkdv_inner(
             dk, dv = bwd_dkdv_block_mn(
                 {{gen_argdefs()}},
                 dk, dv, qT_ptrs, k, v, do_ptrs, DELTA, LSE, Q_LEN, KV_LEN,
-                off_z, off_hq, offs_n1, offs_m1,
+                off_z, off_hq, offs_n1, offs_m1, offs_k,
                 stride_qm, stride_qd, stride_dom, stride_dod,
                 q_indices, sparse_q_num_blocks,
                 MATMUL_PRECISION, RCP_LN2,
@@ -1887,7 +1935,7 @@ def bwd_dkdv_inner(
             dk, dv = bwd_dkdv_block_mn(
                 {{gen_argdefs()}},
                 dk, dv, qT_ptrs, k, v, do_ptrs, DELTA, LSE, Q_LEN, KV_LEN,
-                off_z, off_hq, offs_n1, offs_m1,
+                off_z, off_hq, offs_n1, offs_m1, offs_k,
                 stride_qm, stride_qd, stride_dom, stride_dod,
                 q_indices, sparse_q_num_blocks,
                 MATMUL_PRECISION, RCP_LN2,
@@ -1911,7 +1959,7 @@ def bwd_dkdv_inner(
 def bwd_dkdv_block_mn(
     {{gen_argdefs()}},
     dk, dv, qT_ptrs, k, v, do_ptrs, DELTA, LSE, Q_LEN, KV_LEN,
-    off_z, off_hq, offs_n1, offs_m1,
+    off_z, off_hq, offs_n1, offs_m1, offs_k,
     stride_qm, stride_qd, stride_dom, stride_dod,
     q_indices, sparse_q_num_blocks,
     MATMUL_PRECISION, RCP_LN2,
@@ -1924,7 +1972,7 @@ def bwd_dkdv_block_mn(
         qT = tl.load(qT_ptrs)
         lse = tl.load(LSE + offs_m1)
     else:
-        qT = tl.load(qT_ptrs, mask=offs_m1[None, :] < Q_LEN)
+        qT = tl.load(qT_ptrs, mask=(offs_m1[None, :] < Q_LEN) & (offs_k[:, None] < BLOCK_DMODEL))
         lse = tl.load(LSE + offs_m1, mask=offs_m1 < Q_LEN)
     lse = tl.where(lse == -float("inf"), 0.0, lse)
     qkT = tl.dot(k, qT, input_precision=FLOAT32_PRECISION)
@@ -1973,7 +2021,7 @@ def bwd_dkdv_block_mn(
     if IS_DIVISIBLE:
         do = tl.load(do_ptrs)
     else:
-        do = tl.load(do_ptrs, mask=offs_m1[:, None] < Q_LEN)
+        do = tl.load(do_ptrs, mask=(offs_m1[:, None] < Q_LEN) & (offs_k[None, :] < BLOCK_DMODEL))
     # Compute dV.
     ppT = pT
     dv += tl.dot(ppT.to(MATMUL_PRECISION), do, input_precision=FLOAT32_PRECISION)
@@ -2283,11 +2331,18 @@ def flex_attention_backward(*args, **kwargs):
         full_kv_num_blocks, full_kv_indices, full_q_num_blocks, full_q_indices = (
             empty(0, device=query.get_device()) for _ in range(4)
         )
+    # QK dimensions and power of 2 variants
+    qk_head_dim_static = V.graph.sizevars.evaluate_static_shape(qk_head_dim)
+    kernel_options.setdefault("QK_HEAD_DIM", qk_head_dim_static)
     kernel_options.setdefault(
-        "QK_HEAD_DIM", V.graph.sizevars.evaluate_static_shape(qk_head_dim)
+        "QK_HEAD_DIM_ROUNDED", next_power_of_two(qk_head_dim_static)
     )
+
+    # V dimensions and power of 2 variants
+    v_head_dim_static = V.graph.sizevars.evaluate_static_shape(v_head_dim)
+    kernel_options.setdefault("V_HEAD_DIM", v_head_dim_static)
     kernel_options.setdefault(
-        "V_HEAD_DIM", V.graph.sizevars.evaluate_static_shape(v_head_dim)
+        "V_HEAD_DIM_ROUNDED", next_power_of_two(v_head_dim_static)
     )
 
     SPARSE_Q_BLOCK_SIZE = V.graph.sizevars.evaluate_static_shape(SPARSE_Q_BLOCK_SIZE)
