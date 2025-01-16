@@ -19,6 +19,7 @@ from ..exc import (
     InfiniteGeneratorError,
     ObservedException,
     ObservedUserStopIteration,
+    raise_observed_exception,
     SkipFrame,
     unimplemented,
     Unsupported,
@@ -430,6 +431,9 @@ class GeneratorObjectVariable(VariableTracker):
                 break
         return result
 
+    def _is_generator_new(self):
+        return self.inline_tracer is None or self.inline_tracer.instruction_pointer == 0
+
     def call_method(
         self,
         tx: "InstructionTranslator",
@@ -442,6 +446,20 @@ class GeneratorObjectVariable(VariableTracker):
         elif name == "__iter__":
             # iter(gen) returns itself
             return self
+        elif name == "send":
+            # Sends a value into the generator function. Returns the next value
+            # yielded by the generator, or raises StopIteration if the generator
+            # exits without yielding another value
+            if self._is_generator_new() and len(args):
+                # can't send non-None value to a just-started generator
+                if not all(
+                    isinstance(arg, ConstantVariable) and arg.value is None
+                    for arg in args
+                ):
+                    raise_observed_exception(TypeError, tx)
+            tracer = self._get_inline_tracer(tx)
+            tracer.push_many(args)
+            return self.next_variable(tx)
 
         super().call_method(tx, name, args, kwargs)
 
