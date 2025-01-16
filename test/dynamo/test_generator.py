@@ -296,7 +296,6 @@ class GraphModule(torch.nn.Module):
         expected = list(zip(range(3), whoo(t)))
         self.assertEqual(expected, list(y))
 
-    @unittest.expectedFailure
     def test_zip_subgenerator(self):
         def subgen(t):
             yield t + 1
@@ -424,7 +423,6 @@ class GraphModule(torch.nn.Module):
         with self.assertRaises(StopIteration):
             next(gen)
 
-    @unittest.expectedFailure
     def test_subgenerator(self):
         def subgen(t):
             yield t + 1
@@ -443,7 +441,6 @@ class GraphModule(torch.nn.Module):
         y = fn(t)
         self.assertEqual(y, [t + 1, t + 2, t + 3])
 
-    @unittest.expectedFailure
     def test_return_subgenerator(self):
         def subgen(t):
             yield t + 1
@@ -621,6 +618,26 @@ class GraphModule(torch.nn.Module):
         self.assertEqual(i, 3)
         self.assertEqual(y, [(0, t), (1, t + 1), (2, t + 2)])
 
+    def test_iter(self):
+        def whoo():
+            i = 0
+            while True:
+                yield i
+                i += 1
+
+        @torch.compile(backend="eager", fullgraph=True)
+        def fn(t):
+            s = 0
+            for i in whoo():
+                if i > 5:
+                    break
+                s += i
+            return t + s
+
+        t = torch.randn(2)
+        y = fn(t)
+        self.assertEqual(y, t + sum(range(6)))
+
 
 class GeneratorCPythonTests(GeneratorTestsBase):
     # Taken from commit
@@ -648,7 +665,6 @@ class GeneratorCPythonTests(GeneratorTestsBase):
 
         self._compile_check(fn)
 
-    @unittest.expectedFailure
     def test_issue103488(self):
         def gen_raises():
             yield 1
