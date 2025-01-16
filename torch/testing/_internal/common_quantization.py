@@ -32,10 +32,6 @@ from torch.ao.quantization.quantize_pt2e import (
 from torch.ao.quantization.backend_config import (
     get_executorch_backend_config,
 )
-from torch.ao.quantization.quantizer.xnnpack_quantizer import (
-    XNNPACKQuantizer,
-    get_symmetric_quantization_config,
-)
 from torch.ao.quantization import QuantWrapper, QuantStub, DeQuantStub, \
     default_qconfig, default_dynamic_qconfig, default_per_channel_qconfig, QConfig, default_observer, default_weight_observer, \
     propagate_qconfig_, convert, get_default_qconfig, quantize_dynamic_jit, quantize_jit, float_qparams_weight_only_qconfig, \
@@ -1368,22 +1364,6 @@ class PT2EQuantizationTestCase(QuantizationTestCase):
         m(*example_inputs)
         m = convert_pt2e(m)
         return m
-
-    def _get_pt2e_quantized_linear(self, is_per_channel=False) -> torch.fx.GraphModule:
-        class M(torch.nn.Module):
-            def __init__(self) -> None:
-                super().__init__()
-                self.linear = torch.nn.Linear(2, 2)
-
-            def forward(self, x):
-                return self.linear(x)
-
-        quantizer = XNNPACKQuantizer()
-        operator_config = get_symmetric_quantization_config(is_per_channel=is_per_channel)
-        quantizer.set_global(operator_config)
-        example_inputs = (torch.randn(2, 2),)
-        m = M().eval()
-        return self._quantize(m, quantizer, example_inputs)
 
 # Below are a series of toy models to use in testing quantization
 

@@ -3247,7 +3247,6 @@ LEGACY_MOD_INLINELIST = {
     "torch.ao.quantization.pt2e.qat_utils",
     "torch.ao.quantization.pt2e.representation.rewrite",
     "torch.ao.quantization.pt2e.utils",
-    "torch.ao.quantization.quantizer.xnnpack_quantizer",
     "torch.export.unflatten",
     "torch.optim",
 }

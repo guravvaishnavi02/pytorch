@@ -10,8 +10,8 @@ from torch.ao.quantization.quantizer.x86_inductor_quantizer import (
     FilterFn,
     int8_in_int8_out_ops,
     X86InductorQuantizer,
+    QuantizationConfig,
 )
-from torch.ao.quantization.quantizer.xnnpack_quantizer_utils import QuantizationConfig
 from torch.fx import Node
 
 

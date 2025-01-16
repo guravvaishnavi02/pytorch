@@ -38,13 +38,7 @@ from torch.ao.quantization.quantizer.quantizer import (
     SharedQuantizationSpec,
 )
 from torch.ao.quantization.quantizer.utils import _get_module_name_filter
-from torch.ao.quantization.quantizer.xnnpack_quantizer_utils import (
-    get_bias_qspec,
-    get_input_act_qspec,
-    get_output_act_qspec,
-    get_weight_qspec,
-    QuantizationConfig,
-)
+
 from torch.fx import Node
 from torch.fx.passes.utils.source_matcher_utils import (
     get_source_partitions,
@@ -63,6 +57,73 @@ __all__ = [
     "get_default_x86_inductor_quantization_config",
     "get_x86_inductor_linear_dynamic_fp16_config",
 ]
+
+# In the absence of better name, just winging it with QuantizationConfig
+@dataclass(eq=True, frozen=True)
+class QuantizationConfig:
+    input_activation: Optional[QuantizationSpec]
+    output_activation: Optional[QuantizationSpec]
+    weight: Optional[QuantizationSpec]
+    bias: Optional[QuantizationSpec]
+    # TODO: remove, since we can use observer_or_fake_quant_ctr to express this
+    is_qat: bool = False
+
+
+def get_input_act_qspec(quantization_config: Optional[QuantizationConfig]):
+    if quantization_config is None:
+        return None
+    if quantization_config.input_activation is None:
+        return None
+    quantization_spec: QuantizationSpec = quantization_config.input_activation
+    assert quantization_spec.qscheme in [
+        torch.per_tensor_affine,
+        torch.per_tensor_symmetric,
+    ]
+    return quantization_spec
+
+
+def get_output_act_qspec(quantization_config: Optional[QuantizationConfig]):
+    if quantization_config is None:
+        return None
+    if quantization_config.output_activation is None:
+        return None
+    quantization_spec: QuantizationSpec = quantization_config.output_activation
+    assert quantization_spec.qscheme in [
+        torch.per_tensor_affine,
+        torch.per_tensor_symmetric,
+    ]
+    return quantization_spec
+
+
+def get_weight_qspec(quantization_config: Optional[QuantizationConfig]):
+    if quantization_config is None:
+        return None
+    assert quantization_config is not None
+    if quantization_config.weight is None:
+        return None
+    quantization_spec: QuantizationSpec = quantization_config.weight
+    if quantization_spec.qscheme not in [
+        torch.per_tensor_symmetric,
+        torch.per_channel_symmetric,
+        None,
+    ]:
+        raise ValueError(
+            f"Unsupported quantization_spec {quantization_spec} for weight"
+        )
+    return quantization_spec
+
+
+def get_bias_qspec(quantization_config: Optional[QuantizationConfig]):
+    if quantization_config is None:
+        return None
+    assert quantization_config is not None
+    if quantization_config.bias is None:
+        return None
+    quantization_spec: QuantizationSpec = quantization_config.bias
+    assert (
+        quantization_spec.dtype == torch.float
+    ), "Only float dtype for bias is supported for bias right now"
+    return quantization_spec
 
 
 @dataclass

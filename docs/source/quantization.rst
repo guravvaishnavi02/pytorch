@@ -509,7 +509,9 @@ API Example::
   import torch
   from torch.ao.quantization.quantize_pt2e import prepare_pt2e
   from torch.export import export_for_training
-  from torch.ao.quantization.quantizer import (
+  # This has now moved to `executoch/backends/xnnpack/quantizer`
+  # Taking on ExecuTorch as a dependency to run this tutorial.
+  from executorch.backends.xnnpack.quantizer import (
       XNNPACKQuantizer,
       get_symmetric_quantization_config,
   )
@@ -1354,8 +1356,6 @@ Please take a look at `Limitations of Symbolic Tracing <https://pytorch.org/docs
 .. py:module:: torch.ao.quantization.quantizer.utils
 .. py:module:: torch.ao.quantization.quantizer.x86_inductor_quantizer
 .. py:module:: torch.ao.quantization.quantizer.xpu_inductor_quantizer
-.. py:module:: torch.ao.quantization.quantizer.xnnpack_quantizer
-.. py:module:: torch.ao.quantization.quantizer.xnnpack_quantizer_utils
 .. py:module:: torch.ao.quantization.stubs
 .. py:module:: torch.ao.quantization.utils
 .. py:module:: torch.nn.intrinsic.modules.fused

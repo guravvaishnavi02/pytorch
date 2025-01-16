@@ -359,7 +359,6 @@ coverage_ignore_functions = [
     "prepare_qat_pt2e",
     # torch.ao.quantization.quantizer.embedding_quantizer
     "get_embedding_operators_config",
-    # torch.ao.quantization.quantizer.xnnpack_quantizer_utils
     "get_bias_qspec",
     "get_input_act_qspec",
     "get_output_act_qspec",
@@ -2462,9 +2461,6 @@ coverage_ignore_classes = [
     "X86InductorQuantizer",
     # torch.ao.quantization.quantizer.xpu_inductor_quantizer
     "XPUInductorQuantizer",
-    # torch.ao.quantization.quantizer.xnnpack_quantizer
-    "XNNPACKQuantizer",
-    # torch.ao.quantization.quantizer.xnnpack_quantizer_utils
     "OperatorConfig",
     "QuantizationConfig",
     # torch.ao.quantization.stubs

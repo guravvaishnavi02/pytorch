@@ -88,9 +88,6 @@ try:
     from quantization.pt2e.test_numeric_debugger import TestNumericDebugger  # noqa: F401
     from quantization.pt2e.test_quantize_pt2e import TestQuantizePT2E  # noqa: F401
     from quantization.pt2e.test_quantize_pt2e import TestQuantizePT2EAffineQuantization  # noqa: F401
-    from quantization.pt2e.test_representation import TestPT2ERepresentation  # noqa: F401
-    from quantization.pt2e.test_xnnpack_quantizer import TestXNNPACKQuantizer  # noqa: F401
-    from quantization.pt2e.test_xnnpack_quantizer import TestXNNPACKQuantizerModels  # noqa: F401
     from quantization.pt2e.test_x86inductor_quantizer import TestQuantizePT2EX86Inductor  # noqa: F401
     # TODO: Figure out a way to merge all QAT tests in one TestCase
     from quantization.pt2e.test_quantize_pt2e_qat import TestQuantizePT2EQAT_ConvBn1d  # noqa: F401

@@ -30,10 +30,6 @@ from torch.ao.quantization.quantizer import (
     QuantizationSpec,
     Quantizer,
 )
-from torch.ao.quantization.quantizer.xnnpack_quantizer import (
-    get_symmetric_quantization_config,
-    XNNPACKQuantizer,
-)
 from torch.export import export_for_training
 from torch.testing._internal.common_cuda import TEST_CUDA
 from torch.testing._internal.common_quantization import (

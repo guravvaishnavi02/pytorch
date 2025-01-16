@@ -31,7 +31,7 @@ def generate_numeric_debug_handle(ep: ExportedProgram) -> None:
         generate_numeric_debug_handle(ep)
 
         m = ep.module()
-        quantizer = XNNPACKQuantizer()
+        quantizer = XNNPACKQuantizer() # In the ExecuTorch repo.
         m = prepare_pt2e(m, quantizer)
         m = convert_pt2e(m)
     """

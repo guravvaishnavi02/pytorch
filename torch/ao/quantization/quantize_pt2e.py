@@ -47,7 +47,7 @@ def prepare_pt2e(
 
         import torch
         from torch.ao.quantization.quantize_pt2e import prepare_pt2e
-        from torch.ao.quantization.quantizer import (
+        from executorch.backends.xnnpack.quantizer import (
             XNNPACKQuantizer,
             get_symmetric_quantization_config,
         )
@@ -124,7 +124,7 @@ def prepare_qat_pt2e(
     Example::
         import torch
         from torch.ao.quantization.quantize_pt2e import prepare_qat_pt2e
-        from torch.ao.quantization.quantizer import (
+        from executorch.backends.xnnpack.quantizer import (
             XNNPACKQuantizer,
             get_symmetric_quantization_config,
         )
